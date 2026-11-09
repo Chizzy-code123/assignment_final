@@ -1,12 +1,375 @@
 /*
-Chizzy
-Final Processing project
-TODO: Add breif description of final project here
+   Chizzy
+ I'm making a block breaker type game that I saw on google
+ 
+ The mechanics in this game will be
+ - Moving paddle that can hit the moving ball
+ - Rectangles that will increase the player's score if hit
+ - Score
+ - Retry button
+ */
 
-*/
+// References
+
+// Variables
+boolean roundStarted = false;
+boolean ballInPlay = false;
+
+boolean leftPressed = false;
+boolean rightPressed = false;
+boolean gameOver = false;
+
+PFont fontBold;
+PFont fontNormal;
+
+int score = 0;
+int lastScore = score;
+int highscore = score;
+int maxLives = 1;
+int livesCount = maxLives;
+
+// Buttons
+int startButtonX = 125, startButtonY = 340, startButtonWidth = 350, startButtonHeight = 100;
+int paddleX = 200, paddleY = 480, paddleWidth = 150, paddleHeight = 15;
+
+int playAgainX = 150, playAgainY = 410, playAgainWidth = 240, playAgainHeight = 50;
+
+// Bouncing ball
+int ballX = paddleX + paddleWidth / 2, ballY = paddleY - 25, ballRadius = 25;
+
+// Blocks
+int startBlockX = 90, startBlockY = 60;
+int blockX = startBlockX, blockY = startBlockY, blockWidth = 50, blockHeight = 25, blockRadius = 10;
+boolean blocksLoaded = false;
+
+// Configurations
+int screenWidth = 600, screenHeight = 600;
+int paddleSpeed = 10;
+float ballSpeedX = 4, ballSpeedY = 4;
+
+boolean blockCollisionDebounce = false;
+float lastBlockCollision;
+float collisionCooldown = 250;
+
+int blockMaxCount = 28;
+int blockColumns = 7;
+int blockSpacingX = 55, blockSpacingY = 30;
+int blockCount = blockMaxCount;
+int blockPointsWorth = 50;
+
+boolean[] blockAlive = new boolean[blockMaxCount];
+
+PImage livesIcon;
+int livesX = 20, livesY = 20;
 
 void setup() {
+  size(600, 600);
+  background(20);
+  livesIcon = loadImage("love-always-wins.png");
+  fontBold = createFont("Arial Bold", 42);
+  fontNormal = createFont("Arial", 32);
+
+  // Load data
+  JSONObject obj = loadJSONObject("highscore.json");
+  if (obj != null) {
+    highscore = obj.getInt("highscore");
+  }
+
+  for (int i = 0; i < blockMaxCount; i++) {
+    blockAlive[i] = true;
+  }
+}
+
+// Handles ball movement and collision
+void updateBall() {
+  if (gameOver) {
+    return;
+  }
+  // Moving the ball
+  ballX += ballSpeedX;
+  ballY += ballSpeedY;
+
+  // Ball hitting the left wall
+  if (ballX - ballRadius < 0) {
+    ballX = ballRadius;
+    ballSpeedX *= -1;
+  }
+
+  // Ball hitting the right wall
+  if (ballX + ballRadius > screenWidth) {
+    ballX = screenWidth - ballRadius;
+    ballSpeedX *= -1;
+  }
+
+  // Hitting the top
+  if (ballY - ballRadius < 0) {
+    ballY = ballRadius;
+    ballSpeedY *= -1;
+  }
+
+  // Ball and paddle collision
+  if (ballX >= paddleX && ballX <= paddleX + paddleWidth &&
+    ballY + ballRadius >= paddleY && ballY <= paddleY + paddleHeight && ballSpeedY > 0) {
+
+    float paddleCenterX = paddleX + (paddleWidth / 2.0);
+    float hitOffset = ballX - paddleCenterX;
+    float normalizedHit = hitOffset / (paddleWidth / 2.0);
+
+    float maxHorizontalSpeed = 6.0;
+    ballSpeedX = normalizedHit * maxHorizontalSpeed;
+
+    float upwardSpeed = 6.0;
+    ballSpeedY = -upwardSpeed;
+
+    ballY = paddleY - ballRadius;
+  }
+
+  // Player lost a life
+  if (ballY + ballRadius > screenHeight) {
+    resetBall();
+
+    livesCount -= 1;
+    if (livesCount <= 0) {
+      gameOver();
+    }
+  }
+}
+
+void gameOver() {
+  println("Player has lost all their lives!");
+  livesCount = maxLives;
+  resetBlocks();
+  gameOver = true;
+  roundStarted = false;
+  lastScore = score;
+
+  // Save the highscore
+  if (score > highscore) {
+    highscore = score;
+    JSONObject obj = new JSONObject();
+    obj.setInt("highscore", score);
+    saveJSONObject(obj, "highscore.json");
+  }
+
+  score = 0;
+}
+
+void resetBall() {
+  paddleX = 200;
+  paddleY = 480;
+
+  ballX = paddleX + paddleWidth / 2;
+  ballY = paddleY - 25;
+}
+
+void resetBlocks() {
+  strokeWeight(0);
+  blockCount = blockMaxCount;
+  for (int i = 0; i < blockMaxCount; i++) {
+    blockAlive[i] = true;
+  }
 }
 
 void draw() {
+
+  if (!roundStarted && !gameOver) {
+    // Title
+    textSize(64);
+    fill(255);
+    text("Block Breaker", 125, 100);
+    rect(startButtonX, startButtonY, startButtonWidth, startButtonHeight, 15);
+    textSize(55);
+    fill(0);
+    text("Start", 235, 410);
+  }
+  // Starting the game
+  if (roundStarted) {
+    // Paddle movement
+    if (rightPressed && paddleX < screenWidth - paddleWidth) {
+      paddleX += paddleSpeed;
+    }
+
+    if (leftPressed && paddleX > 0) {
+      paddleX -= paddleSpeed;
+    }
+
+    // Block collision debounce
+    if (blockCollisionDebounce) {
+      if (millis() - lastBlockCollision >= collisionCooldown) {
+        blockCollisionDebounce = false;
+      }
+    }
+    background(20);
+    // Create the paddle
+    fill(255);
+    rect(paddleX, paddleY, paddleWidth, paddleHeight, 15);
+
+    // Add lives
+    for (int i = 1; i <= livesCount; i++) {
+      image(livesIcon, livesX * i * 2, livesY);
+    }
+
+    updateBall();
+
+    // Create the ball
+    circle(ballX, ballY, ballRadius);
+    textFont(fontNormal);
+
+    // Score Text
+    fill(255);
+    text(score, 275, 40);
+
+    // Load the blocks
+    for (int i = 0; i < blockMaxCount; i++) {
+
+      if (!blockAlive[i]) {
+        continue;
+      }
+      int col = i % blockColumns;
+      int row = i / blockColumns;
+
+      // Positions
+      int x = startBlockX + col * blockSpacingX;
+      int y = startBlockY + row * blockSpacingY;
+      fill(210, 198, 45);
+
+      // Setting the colors of the block
+      strokeWeight(3);
+      if (i >= 0 && i < 7) {
+        // Yellow
+        fill(210, 198, 45);
+        stroke(158, 138, 24);
+      } else if (i > 0 && i < 14) {
+        // Green
+        fill(2, 161, 23);
+        stroke(7, 140, 25);
+      } else if (i > 0 && i < 21) {
+        // Red
+        fill(255, 59, 59);
+        stroke(209, 44, 44);
+      } else if (i > 0 && i < 28) {
+        // Blue
+        fill(42, 128, 209);
+        stroke(40, 100, 156);
+      }
+
+      rect(x, y, blockWidth, blockHeight, 10);
+      // Collision with the ball
+      if (
+        ballX + ballRadius > x &&
+        ballX - ballRadius < x + blockWidth &&
+
+        ballY + ballRadius > y &&
+        ballY - ballRadius < y + blockHeight
+        ) {
+
+        if (blockCollisionDebounce) {
+          return;
+        }
+
+        float deltaX = ballX - (blockX + blockWidth / 2);
+        float deltaY = ballY - (blockY + blockHeight / 2);
+
+        float scaleX = 1;
+        float scaleY = 1;
+
+        if (blockWidth > blockHeight) {
+          scaleX = blockHeight / blockWidth;
+        } else {
+          scaleY = blockWidth / blockHeight;
+        }
+
+        deltaX *= scaleX;
+        deltaY *= scaleY;
+
+        if (abs(deltaX) > abs(deltaY)) {
+          ballSpeedX *= -1;
+        } else {
+          ballSpeedY *= -1;
+        }
+
+        // Destroy the block
+        blockAlive[i] = false;
+        blockCount -= 1;
+        blockCollisionDebounce = true;
+        lastBlockCollision = millis();
+        score += blockPointsWorth;
+
+        println("Block count: " + blockCount);
+
+        // Player got all the blocks
+        if (blockCount <= 0) {
+          blockCount = 0;
+          resetBlocks();
+        }
+        break;
+      }
+    }
+
+    if (gameOver) {
+      background(20);
+      fill(120);
+      rect(100, 150, 350, 250, 12);
+
+      fill(255);
+      textFont(fontBold);
+      text("GAME OVER", 135, 225);
+
+      textSize(20);
+      // Show the score
+      text("Score", 170, 320);
+      text(lastScore, 185, 345);
+
+      // Highscore
+      text("Highscore", 285, 320);
+      text(highscore, 320, 345);
+
+      // Create "Play again" button
+      rect(playAgainX, playAgainY, playAgainWidth, playAgainHeight, 15);
+      fill(0);
+      textSize(32);
+      text("Play Again", 195, 445);
+    }
+  }
+}
+
+// Paddle movement
+void keyPressed() {
+  // Move the paddle right
+  if (Character.toLowerCase(key) == 'd' || keyCode == RIGHT) {
+    rightPressed = true;
+  } else if (Character.toLowerCase(key) == 'a' || keyCode == LEFT) {
+    // Move it left
+    leftPressed = true;
+  }
+}
+
+void keyReleased() {
+  if (Character.toLowerCase(key) == 'a' || keyCode == LEFT) {
+    leftPressed = false;
+  } else if (Character.toLowerCase(key) == 'd' || keyCode == RIGHT) {
+    rightPressed = false;
+  }
+}
+
+void mousePressed() {
+
+  print("MouseX: " + mouseX + " ");
+  print("MouseY " + mouseY);
+
+  // Start button
+  if (mouseX >= startButtonX &&
+    mouseX <= startButtonX + startButtonWidth &&
+    mouseY >= startButtonY &&
+    mouseY <= startButtonY + startButtonHeight && !roundStarted) {
+    roundStarted = true;
+  }
+
+  // Pressed play again
+  if (mouseX >= playAgainX && mouseX <= playAgainX + playAgainWidth
+    && mouseY >= playAgainY && mouseY <= playAgainY + playAgainHeight
+    && gameOver) {
+    roundStarted = true;
+    gameOver = false;
+  }
 }
