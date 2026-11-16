@@ -35,7 +35,7 @@ int paddleX = 200, paddleY = 480, paddleWidth = 150, paddleHeight = 15;
 int playAgainX = 150, playAgainY = 410, playAgainWidth = 240, playAgainHeight = 50;
 
 // Bouncing ball
-int ballX = paddleX + paddleWidth / 2, ballY = paddleY - 25, ballRadius = 25;
+ArrayList<Ball> balls = new ArrayList<Ball>();
 
 // Blocks
 int startBlockX = 90, startBlockY = 60;
@@ -45,7 +45,6 @@ boolean blocksLoaded = false;
 // Configurations
 int screenWidth = 600, screenHeight = 600;
 int paddleSpeed = 10;
-float ballSpeedX = 4, ballSpeedY = 4;
 
 boolean blockCollisionDebounce = false;
 float lastBlockCollision;
@@ -57,7 +56,11 @@ int blockSpacingX = 55, blockSpacingY = 30;
 int blockCount = blockMaxCount;
 int blockPointsWorth = 50;
 
+// Special block
+int currentSpecialBlockIndex = 0;
+
 boolean[] blockAlive = new boolean[blockMaxCount];
+int[] specialBlocks = new int[6];
 
 PImage livesIcon;
 int livesX = 20, livesY = 20;
@@ -77,62 +80,21 @@ void setup() {
 
   for (int i = 0; i < blockMaxCount; i++) {
     blockAlive[i] = true;
-  }
-}
 
-// Handles ball movement and collision
-void updateBall() {
-  if (gameOver) {
-    return;
-  }
-  // Moving the ball
-  ballX += ballSpeedX;
-  ballY += ballSpeedY;
-
-  // Ball hitting the left wall
-  if (ballX - ballRadius < 0) {
-    ballX = ballRadius;
-    ballSpeedX *= -1;
-  }
-
-  // Ball hitting the right wall
-  if (ballX + ballRadius > screenWidth) {
-    ballX = screenWidth - ballRadius;
-    ballSpeedX *= -1;
-  }
-
-  // Hitting the top
-  if (ballY - ballRadius < 0) {
-    ballY = ballRadius;
-    ballSpeedY *= -1;
-  }
-
-  // Ball and paddle collision
-  if (ballX >= paddleX && ballX <= paddleX + paddleWidth &&
-    ballY + ballRadius >= paddleY && ballY <= paddleY + paddleHeight && ballSpeedY > 0) {
-
-    float paddleCenterX = paddleX + (paddleWidth / 2.0);
-    float hitOffset = ballX - paddleCenterX;
-    float normalizedHit = hitOffset / (paddleWidth / 2.0);
-
-    float maxHorizontalSpeed = 6.0;
-    ballSpeedX = normalizedHit * maxHorizontalSpeed;
-
-    float upwardSpeed = 6.0;
-    ballSpeedY = -upwardSpeed;
-
-    ballY = paddleY - ballRadius;
-  }
-
-  // Player lost a life
-  if (ballY + ballRadius > screenHeight) {
-    resetBall();
-
-    livesCount -= 1;
-    if (livesCount <= 0) {
-      gameOver();
+    // 25% chance to have a special ball
+    if (random(0, 100) < 25 && currentSpecialBlockIndex < specialBlocks.length) {
+      specialBlocks[currentSpecialBlockIndex] = i;
+      currentSpecialBlockIndex++;
+      println("Special block : " + currentSpecialBlockIndex);
     }
   }
+
+  balls.add(new Ball(
+    4,
+    -4,
+    0,
+    25
+    ));
 }
 
 void gameOver() {
@@ -157,9 +119,18 @@ void gameOver() {
 void resetBall() {
   paddleX = 200;
   paddleY = 480;
+  
+  balls.clear();
 
-  ballX = paddleX + paddleWidth / 2;
-  ballY = paddleY - 25;
+  // Restart position of ball
+  balls.add(new Ball(
+    paddleX + paddleWidth / 2,
+    paddleY - 25,
+    4,
+    -4,
+    0,
+    25
+  ));
 }
 
 void resetBlocks() {
@@ -209,10 +180,18 @@ void draw() {
       image(livesIcon, livesX * i * 2, livesY);
     }
 
-    updateBall();
+    for (int i = balls.size() - 1; i >= 0; i--) {
 
-    // Create the ball
-    circle(ballX, ballY, ballRadius);
+      Ball ball = balls.get(i);
+
+      ball.update();
+      ball.display();
+
+      // Check if ball fell off screen
+      if (ball.ballY - ball.radius > screenHeight) {
+        balls.remove(i);
+      }
+    }
     textFont(fontNormal);
 
     // Score Text
@@ -254,83 +233,121 @@ void draw() {
       }
 
       rect(x, y, blockWidth, blockHeight, 10);
+
       // Collision with the ball
-      if (
-        ballX + ballRadius > x &&
-        ballX - ballRadius < x + blockWidth &&
 
-        ballY + ballRadius > y &&
-        ballY - ballRadius < y + blockHeight
-        ) {
 
-        if (blockCollisionDebounce) {
-          return;
+      for (int b = 0; b < balls.size(); b++) {
+
+        Ball ball = balls.get(b);
+
+        if (
+          ball.ballX + ball.radius > x &&
+          ball.ballX - ball.radius < x + blockWidth &&
+          ball.ballY + ball.radius > y &&
+          ball.ballY - ball.radius < y + blockHeight
+          ) {
+
+          // Calculate collision direction
+          float deltaX = ball.ballX - (x + blockWidth / 2.0);
+          float deltaY = ball.ballY - (y + blockHeight / 2.0);
+
+          float scaleX = (float) blockHeight / blockWidth;
+          float scaleY = 1;
+
+          deltaX *= scaleX;
+          deltaY *= scaleY;
+
+          if (abs(deltaX) > abs(deltaY)) {
+            ball.speedX *= -1;
+          } else {
+            ball.speedY *= -1;
+          }
+
+          // Spawn a bonus ball if this is a special block
+          for (int index = 0; index < currentSpecialBlockIndex; index++) {
+
+            if (specialBlocks[index] == i) {
+              createBall(ball.ballX, ball.ballY);
+              break;
+            }
+          }
+
+          // Destroy block
+          blockAlive[i] = false;
+          blockCount--;
+
+          score += blockPointsWorth;
+
+          if (blockCount <= 0) {
+            resetBlocks();
+          }
+
+          break;
         }
-
-        float deltaX = ballX - (blockX + blockWidth / 2);
-        float deltaY = ballY - (blockY + blockHeight / 2);
-
-        float scaleX = 1;
-        float scaleY = 1;
-
-        if (blockWidth > blockHeight) {
-          scaleX = blockHeight / blockWidth;
-        } else {
-          scaleY = blockWidth / blockHeight;
-        }
-
-        deltaX *= scaleX;
-        deltaY *= scaleY;
-
-        if (abs(deltaX) > abs(deltaY)) {
-          ballSpeedX *= -1;
-        } else {
-          ballSpeedY *= -1;
-        }
-
-        // Destroy the block
-        blockAlive[i] = false;
-        blockCount -= 1;
-        blockCollisionDebounce = true;
-        lastBlockCollision = millis();
-        score += blockPointsWorth;
-
-        println("Block count: " + blockCount);
-
-        // Player got all the blocks
-        if (blockCount <= 0) {
-          blockCount = 0;
-          resetBlocks();
-        }
-        break;
       }
-    }
 
-    if (gameOver) {
-      background(20);
-      fill(120);
-      rect(100, 150, 350, 250, 12);
 
-      fill(255);
-      textFont(fontBold);
-      text("GAME OVER", 135, 225);
+      // Destroy the block
+      blockAlive[i] = false;
+      blockCount -= 1;
+      blockCollisionDebounce = true;
+      lastBlockCollision = millis();
 
-      textSize(20);
-      // Show the score
-      text("Score", 170, 320);
-      text(lastScore, 185, 345);
+      score += blockPointsWorth;
 
-      // Highscore
-      text("Highscore", 285, 320);
-      text(highscore, 320, 345);
+      println("Block count: " + blockCount);
 
-      // Create "Play again" button
-      rect(playAgainX, playAgainY, playAgainWidth, playAgainHeight, 15);
-      fill(0);
-      textSize(32);
-      text("Play Again", 195, 445);
+      // Player got all the blocks
+      if (blockCount <= 0) {
+        blockCount = 0;
+        resetBlocks();
+      }
+      break;
     }
   }
+
+  if (gameOver) {
+    background(20);
+    fill(120);
+    rect(100, 150, 350, 250, 12);
+
+    fill(255);
+    textFont(fontBold);
+    text("GAME OVER", 135, 225);
+
+    textSize(20);
+    // Show the score
+    text("Score", 170, 320);
+    text(lastScore, 185, 345);
+
+    // Highscore
+    text("Highscore", 285, 320);
+    text(highscore, 320, 345);
+
+    // Create "Play again" button
+    rect(playAgainX, playAgainY, playAgainWidth, playAgainHeight, 15);
+    fill(0);
+    textSize(32);
+    text("Play Again", 195, 445);
+  }
+}
+void createBall(float spawnX, float spawnY) {
+
+  float randomSpeedX = random(-5, 5);
+  float randomSpeedY = random(-7, -4);
+  float randomGravity = random(0.05, 0.20);
+
+  Ball newBall = new Ball(
+    spawnX,
+    spawnY,
+    randomSpeedX,
+    randomSpeedY,
+    randomGravity,
+    15
+    );
+
+  balls.add(newBall);
 }
 
 // Paddle movement
@@ -371,5 +388,73 @@ void mousePressed() {
     && gameOver) {
     roundStarted = true;
     gameOver = false;
+  }
+}
+
+class Ball {
+  float ballX, ballY;
+  float speedX, speedY;
+  int radius = 25;
+
+  Ball(float ballX, float ballY, float speedX, float speedY) {
+    this.ballX = ballX;
+    this.ballY = ballY;
+    this.speedX = speedX;
+    this.speedY = speedY;
+    this.radius = radius;
+  }
+
+  void update() {
+    ballX += speedX;
+    ballY += speedY;
+
+    if (ballX - radius < 0) {
+      ballX = radius;
+      speedX *= -1;
+    }
+
+    // Ball hitting the right wall
+    if (ballX + radius > screenWidth) {
+      ballX = screenWidth - radius;
+      speedX *= -1;
+    }
+
+    // Hitting the top
+    if (ballY - radius < 0) {
+      ballY = radius;
+      speedY *= -1;
+    }
+
+    // Ball and paddle collision
+    if (ballX >= paddleX && ballX <= paddleX + paddleWidth &&
+      ballY + radius >= paddleY && ballY <= paddleY + paddleHeight && speedY > 0) {
+
+      float paddleCenterX = paddleX + (paddleWidth / 2.0);
+      float hitOffset = ballX - paddleCenterX;
+      float normalizedHit = hitOffset / (paddleWidth / 2.0);
+
+      float maxHorizontalSpeed = 6.0;
+      speedX = normalizedHit * maxHorizontalSpeed;
+
+      float upwardSpeed = 6.0;
+      speedY = -upwardSpeed;
+
+      ballY = paddleY - radius;
+    }
+
+    // Player lost a life
+    if (ballY + radius > screenHeight) {
+      resetBall();
+
+      livesCount -= 1;
+      if (livesCount <= 0) {
+        gameOver();
+      }
+    }
+  }
+
+  void display() {
+    fill(255);
+    circle(ballX, ballY, radius);
   }
 }
