@@ -1,5 +1,5 @@
 /*
-   Chizzy
+    Chizzy
  I'm making a block breaker type game that I saw on google
  
  The mechanics in this game will be
@@ -25,7 +25,7 @@ PFont fontNormal;
 int score = 0;
 int lastScore = score;
 int highscore = score;
-int maxLives = 1;
+int maxLives = 5;
 int livesCount = maxLives;
 
 // Buttons
@@ -54,6 +54,7 @@ int blockMaxCount = 28;
 int blockColumns = 7;
 int blockSpacingX = 55, blockSpacingY = 30;
 int blockCount = blockMaxCount;
+int currentBlock = 0;
 int blockPointsWorth = 50;
 
 // Special block
@@ -80,25 +81,26 @@ void setup() {
 
   for (int i = 0; i < blockMaxCount; i++) {
     blockAlive[i] = true;
+  }
 
-    // 25% chance to have a special ball
-    if (random(0, 100) < 25 && currentSpecialBlockIndex < specialBlocks.length) {
+  for (int i = 0; i < 28; i++) {
+    if (random(0, 100) < 10 && currentSpecialBlockIndex < specialBlocks.length) {
       specialBlocks[currentSpecialBlockIndex] = i;
       currentSpecialBlockIndex++;
-      println("Special block : " + currentSpecialBlockIndex);
+      println("Special block : " + i);
     }
   }
 
   balls.add(new Ball(
+    paddleX + paddleWidth / 2,
+    paddleY - 25,
     4,
     -4,
-    0,
     25
     ));
 }
 
 void gameOver() {
-  println("Player has lost all their lives!");
   livesCount = maxLives;
   resetBlocks();
   gameOver = true;
@@ -119,7 +121,7 @@ void gameOver() {
 void resetBall() {
   paddleX = 200;
   paddleY = 480;
-  
+
   balls.clear();
 
   // Restart position of ball
@@ -128,9 +130,8 @@ void resetBall() {
     paddleY - 25,
     4,
     -4,
-    0,
     25
-  ));
+    ));
 }
 
 void resetBlocks() {
@@ -142,6 +143,7 @@ void resetBlocks() {
 }
 
 void draw() {
+  background(20);
 
   if (!roundStarted && !gameOver) {
     // Title
@@ -153,6 +155,7 @@ void draw() {
     fill(0);
     text("Start", 235, 410);
   }
+
   // Starting the game
   if (roundStarted) {
     // Paddle movement
@@ -170,7 +173,7 @@ void draw() {
         blockCollisionDebounce = false;
       }
     }
-    background(20);
+
     // Create the paddle
     fill(255);
     rect(paddleX, paddleY, paddleWidth, paddleHeight, 15);
@@ -180,23 +183,17 @@ void draw() {
       image(livesIcon, livesX * i * 2, livesY);
     }
 
-    for (int i = balls.size() - 1; i >= 0; i--) {
-
-      Ball ball = balls.get(i);
-
-      ball.update();
-      ball.display();
-
-      // Check if ball fell off screen
-      if (ball.ballY - ball.radius > screenHeight) {
-        balls.remove(i);
-      }
-    }
-    textFont(fontNormal);
-
     // Score Text
+    textFont(fontNormal);
     fill(255);
     text(score, 275, 40);
+
+    // Update and display balls
+    for (int i = balls.size() - 1; i >= 0; i--) {
+      Ball ball = balls.get(i);
+      ball.update();
+      ball.display();
+    }
 
     // Load the blocks
     for (int i = 0; i < blockMaxCount; i++) {
@@ -204,13 +201,13 @@ void draw() {
       if (!blockAlive[i]) {
         continue;
       }
+
       int col = i % blockColumns;
       int row = i / blockColumns;
 
       // Positions
       int x = startBlockX + col * blockSpacingX;
       int y = startBlockY + row * blockSpacingY;
-      fill(210, 198, 45);
 
       // Setting the colors of the block
       strokeWeight(3);
@@ -218,15 +215,15 @@ void draw() {
         // Yellow
         fill(210, 198, 45);
         stroke(158, 138, 24);
-      } else if (i > 0 && i < 14) {
+      } else if (i >= 7 && i < 14) {
         // Green
         fill(2, 161, 23);
         stroke(7, 140, 25);
-      } else if (i > 0 && i < 21) {
+      } else if (i >= 14 && i < 21) {
         // Red
         fill(255, 59, 59);
         stroke(209, 44, 44);
-      } else if (i > 0 && i < 28) {
+      } else if (i >= 21 && i < 28) {
         // Blue
         fill(42, 128, 209);
         stroke(40, 100, 156);
@@ -235,11 +232,8 @@ void draw() {
       rect(x, y, blockWidth, blockHeight, 10);
 
       // Collision with the ball
-
-
-      for (int b = 0; b < balls.size(); b++) {
-
-        Ball ball = balls.get(b);
+      for (int ballIndex = 0; ballIndex < balls.size(); ballIndex++) {
+        Ball ball = balls.get(ballIndex);
 
         if (
           ball.ballX + ball.radius > x &&
@@ -264,20 +258,18 @@ void draw() {
             ball.speedY *= -1;
           }
 
-          // Spawn a bonus ball if this is a special block
-          for (int index = 0; index < currentSpecialBlockIndex; index++) {
-
-            if (specialBlocks[index] == i) {
-              createBall(ball.ballX, ball.ballY);
-              break;
-            }
-          }
-
           // Destroy block
           blockAlive[i] = false;
           blockCount--;
-
           score += blockPointsWorth;
+
+          // Check for special block
+          for (int s = 0; s < specialBlocks.length; s++) {
+            if (specialBlocks[s] == i) {
+              createBall(x + blockWidth / 2, y + blockHeight / 2);
+              break;
+            }
+          }
 
           if (blockCount <= 0) {
             resetBlocks();
@@ -286,27 +278,16 @@ void draw() {
           break;
         }
       }
+    }
 
-
-      // Destroy the block
-      blockAlive[i] = false;
-      blockCount -= 1;
-      blockCollisionDebounce = true;
-      lastBlockCollision = millis();
-
-      score += blockPointsWorth;
-
-      println("Block count: " + blockCount);
-
-      // Player got all the blocks
-      if (blockCount <= 0) {
-        blockCount = 0;
-        resetBlocks();
-      }
-      break;
+    // Player got all the blocks
+    if (blockCount <= 0) {
+      blockCount = 0;
+      resetBlocks();
     }
   }
 
+  // Moved gameOver screen handling inside draw() to fix scope error
   if (gameOver) {
     background(20);
     fill(120);
@@ -332,19 +313,17 @@ void draw() {
     text("Play Again", 195, 445);
   }
 }
-void createBall(float spawnX, float spawnY) {
 
+void createBall(float spawnX, float spawnY) {
   float randomSpeedX = random(-5, 5);
   float randomSpeedY = random(-7, -4);
-  float randomGravity = random(0.05, 0.20);
 
   Ball newBall = new Ball(
     spawnX,
     spawnY,
     randomSpeedX,
     randomSpeedY,
-    randomGravity,
-    15
+    25
     );
 
   balls.add(newBall);
@@ -352,11 +331,9 @@ void createBall(float spawnX, float spawnY) {
 
 // Paddle movement
 void keyPressed() {
-  // Move the paddle right
   if (Character.toLowerCase(key) == 'd' || keyCode == RIGHT) {
     rightPressed = true;
   } else if (Character.toLowerCase(key) == 'a' || keyCode == LEFT) {
-    // Move it left
     leftPressed = true;
   }
 }
@@ -370,7 +347,6 @@ void keyReleased() {
 }
 
 void mousePressed() {
-
   print("MouseX: " + mouseX + " ");
   print("MouseY " + mouseY);
 
@@ -396,7 +372,7 @@ class Ball {
   float speedX, speedY;
   int radius = 25;
 
-  Ball(float ballX, float ballY, float speedX, float speedY) {
+  Ball(float ballX, float ballY, float speedX, float speedY, int radius) {
     this.ballX = ballX;
     this.ballY = ballY;
     this.speedX = speedX;
@@ -444,11 +420,11 @@ class Ball {
 
     // Player lost a life
     if (ballY + radius > screenHeight) {
-      resetBall();
-
       livesCount -= 1;
       if (livesCount <= 0) {
         gameOver();
+      } else {
+        resetBall();
       }
     }
   }
