@@ -3,10 +3,10 @@
  I'm making a block breaker type game that I saw on google
  
  The mechanics in this game will be
- - Moving paddle that can hit the moving ball
- - Rectangles that will increase the player's score if hit
- - Score
- - Retry button
+- Moving paddle that can hit the moving ball
+- Rectangles that will increase the player's score if hit
+- Score
+- Retry button
  */
 
 // References
@@ -61,7 +61,7 @@ int blockPointsWorth = 50;
 int currentSpecialBlockIndex = 0;
 
 boolean[] blockAlive = new boolean[blockMaxCount];
-int[] specialBlocks = new int[6];
+int[] specialBlocks = new int[3];
 
 PImage livesIcon;
 int livesX = 20, livesY = 20;
@@ -167,13 +167,6 @@ void draw() {
       paddleX -= paddleSpeed;
     }
 
-    // Block collision debounce
-    if (blockCollisionDebounce) {
-      if (millis() - lastBlockCollision >= collisionCooldown) {
-        blockCollisionDebounce = false;
-      }
-    }
-
     // Create the paddle
     fill(255);
     rect(paddleX, paddleY, paddleWidth, paddleHeight, 15);
@@ -188,53 +181,76 @@ void draw() {
     fill(255);
     text(score, 275, 40);
 
-    // Update and display balls
-    for (int i = balls.size() - 1; i >= 0; i--) {
-      Ball ball = balls.get(i);
-      ball.update();
-      ball.display();
-    }
+    for (int ballIndex = 0; ballIndex < balls.size(); ballIndex++) {
+      Ball ball = balls.get(ballIndex);
 
-    // Load the blocks
-    for (int i = 0; i < blockMaxCount; i++) {
-
-      if (!blockAlive[i]) {
-        continue;
+      // Block collision debounce
+      if (millis() - lastBlockCollision >= collisionCooldown) {
+        ball.hitDebounce = false;
       }
 
-      int col = i % blockColumns;
-      int row = i / blockColumns;
+      // Update and display balls
+      if (balls.size() > 0) {
+        ball.update();
+        ball.display();
+      }
+      
+      // Player lost a life
+      if (ball.ballY + ball.radius > screenHeight) {
+        balls.remove(ball);
+        if (balls.size() <= 0) {
+          livesCount--;
+          resetBall();
+          if (livesCount <= 0) {
+            gameOver();
+          }
+        }
+      }
+    }
 
-      // Positions
+    for (int blockIndex = 0; blockIndex < blockMaxCount; blockIndex++) {
+
+      if (!blockAlive[blockIndex]) continue;
+
+      int col = blockIndex % blockColumns;
+      int row = blockIndex / blockColumns;
+
       int x = startBlockX + col * blockSpacingX;
       int y = startBlockY + row * blockSpacingY;
 
-      // Setting the colors of the block
       strokeWeight(3);
-      if (i >= 0 && i < 7) {
-        // Yellow
+
+      if (blockIndex < 7) {
         fill(210, 198, 45);
         stroke(158, 138, 24);
-      } else if (i >= 7 && i < 14) {
-        // Green
+      } else if (blockIndex < 14) {
         fill(2, 161, 23);
         stroke(7, 140, 25);
-      } else if (i >= 14 && i < 21) {
-        // Red
+      } else if (blockIndex < 21) {
         fill(255, 59, 59);
         stroke(209, 44, 44);
-      } else if (i >= 21 && i < 28) {
-        // Blue
+      } else {
         fill(42, 128, 209);
         stroke(40, 100, 156);
       }
 
       rect(x, y, blockWidth, blockHeight, 10);
+    }
 
-      // Collision with the ball
-      for (int ballIndex = 0; ballIndex < balls.size(); ballIndex++) {
-        Ball ball = balls.get(ballIndex);
+    for (int b = 0; b < balls.size(); b++) {
+      Ball ball = balls.get(b);
 
+      for (int bb = 0; bb < blockMaxCount; bb++) {
+
+        if (!blockAlive[bb]) continue;
+
+        int col = bb % blockColumns;
+        int row = bb / blockColumns;
+
+        int x = startBlockX + col * blockSpacingX;
+        int y = startBlockY + row * blockSpacingY;
+
+        // Collision detection
         if (
           ball.ballX + ball.radius > x &&
           ball.ballX - ball.radius < x + blockWidth &&
@@ -242,15 +258,9 @@ void draw() {
           ball.ballY - ball.radius < y + blockHeight
           ) {
 
-          // Calculate collision direction
+          // Determine collision direction
           float deltaX = ball.ballX - (x + blockWidth / 2.0);
           float deltaY = ball.ballY - (y + blockHeight / 2.0);
-
-          float scaleX = (float) blockHeight / blockWidth;
-          float scaleY = 1;
-
-          deltaX *= scaleX;
-          deltaY *= scaleY;
 
           if (abs(deltaX) > abs(deltaY)) {
             ball.speedX *= -1;
@@ -259,22 +269,19 @@ void draw() {
           }
 
           // Destroy block
-          blockAlive[i] = false;
+          blockAlive[bb] = false;
           blockCount--;
           score += blockPointsWorth;
 
-          // Check for special block
+          // Check special blocks
           for (int s = 0; s < specialBlocks.length; s++) {
-            if (specialBlocks[s] == i) {
+            if (specialBlocks[s] == bb) {
               createBall(x + blockWidth / 2, y + blockHeight / 2);
               break;
             }
           }
 
-          if (blockCount <= 0) {
-            resetBlocks();
-          }
-
+          // Stop checking blocks for THIS ball
           break;
         }
       }
@@ -287,7 +294,7 @@ void draw() {
     }
   }
 
-  // Moved gameOver screen handling inside draw() to fix scope error
+  // Game over screen handling inside draw()
   if (gameOver) {
     background(20);
     fill(120);
@@ -347,9 +354,6 @@ void keyReleased() {
 }
 
 void mousePressed() {
-  print("MouseX: " + mouseX + " ");
-  print("MouseY " + mouseY);
-
   // Start button
   if (mouseX >= startButtonX &&
     mouseX <= startButtonX + startButtonWidth &&
@@ -371,6 +375,7 @@ class Ball {
   float ballX, ballY;
   float speedX, speedY;
   int radius = 25;
+  boolean hitDebounce = false;
 
   Ball(float ballX, float ballY, float speedX, float speedY, int radius) {
     this.ballX = ballX;
@@ -378,6 +383,7 @@ class Ball {
     this.speedX = speedX;
     this.speedY = speedY;
     this.radius = radius;
+    this.hitDebounce = hitDebounce;
   }
 
   void update() {
@@ -416,16 +422,6 @@ class Ball {
       speedY = -upwardSpeed;
 
       ballY = paddleY - radius;
-    }
-
-    // Player lost a life
-    if (ballY + radius > screenHeight) {
-      livesCount -= 1;
-      if (livesCount <= 0) {
-        gameOver();
-      } else {
-        resetBall();
-      }
     }
   }
 
