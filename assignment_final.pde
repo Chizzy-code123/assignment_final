@@ -3,13 +3,11 @@
  I'm making a block breaker type game that I saw on google
  
  The mechanics in this game will be
-- Moving paddle that can hit the moving ball
-- Rectangles that will increase the player's score if hit
-- Score
-- Retry button
+ - Moving paddle that can hit the moving ball
+ - Rectangles that will increase the player's score if hit
+ - Score
+ - Retry button
  */
-
-// References
 
 // Variables
 boolean roundStarted = false;
@@ -25,8 +23,6 @@ PFont fontNormal;
 int score = 0;
 int lastScore = score;
 int highscore = score;
-int maxLives = 5;
-int livesCount = maxLives;
 
 // Buttons
 int startButtonX = 125, startButtonY = 340, startButtonWidth = 350, startButtonHeight = 100;
@@ -45,8 +41,12 @@ boolean blocksLoaded = false;
 // Configurations
 int screenWidth = 600, screenHeight = 600;
 int paddleSpeed = 10;
+int maxLives = 3;
+int livesCount = maxLives;
 
 boolean blockCollisionDebounce = false;
+int blockResetCollisionCooldown = 900;
+float blockGraceEnd = 0;
 float lastBlockCollision;
 float collisionCooldown = 250;
 
@@ -121,7 +121,7 @@ void gameOver() {
 void resetBall() {
   paddleX = 200;
   paddleY = 480;
-
+  ballInPlay = false;
   balls.clear();
 
   // Restart position of ball
@@ -132,6 +132,8 @@ void resetBall() {
     -4,
     25
     ));
+    
+   blockGraceEnd = millis() + blockResetCollisionCooldown;
 }
 
 void resetBlocks() {
@@ -167,12 +169,27 @@ void draw() {
       paddleX -= paddleSpeed;
     }
 
+    // Update ball position
+    if (!ballInPlay) {
+      for (int ballIndex = 0; ballIndex < balls.size(); ballIndex++) {
+        Ball ball = balls.get(ballIndex);
+
+        ball.ballX = paddleX + paddleWidth / 2;
+        ball.ballY = paddleY - 25;
+      }
+
+      fill(255);
+      textAlign(CENTER);
+      text("Press [W] key to begin", 300, 300);
+    }
+
     // Create the paddle
     fill(255);
     rect(paddleX, paddleY, paddleWidth, paddleHeight, 15);
 
     // Add lives
     for (int i = 1; i <= livesCount; i++) {
+      // Got this image from Flaticon
       image(livesIcon, livesX * i * 2, livesY);
     }
 
@@ -181,6 +198,7 @@ void draw() {
     fill(255);
     text(score, 275, 40);
 
+  if (millis() >= blockGraceEnd) {
     for (int ballIndex = 0; ballIndex < balls.size(); ballIndex++) {
       Ball ball = balls.get(ballIndex);
 
@@ -194,7 +212,7 @@ void draw() {
         ball.update();
         ball.display();
       }
-      
+
       // Player lost a life
       if (ball.ballY + ball.radius > screenHeight) {
         balls.remove(ball);
@@ -207,6 +225,7 @@ void draw() {
         }
       }
     }
+  }
 
     for (int blockIndex = 0; blockIndex < blockMaxCount; blockIndex++) {
 
@@ -338,10 +357,16 @@ void createBall(float spawnX, float spawnY) {
 
 // Paddle movement
 void keyPressed() {
+
   if (Character.toLowerCase(key) == 'd' || keyCode == RIGHT) {
     rightPressed = true;
   } else if (Character.toLowerCase(key) == 'a' || keyCode == LEFT) {
     leftPressed = true;
+  } else if (Character.toLowerCase(key) == 'w' || keyCode == UP) {
+
+    if (!ballInPlay && roundStarted) {
+      ballInPlay = true;
+    }
   }
 }
 
@@ -418,7 +443,7 @@ class Ball {
       float maxHorizontalSpeed = 6.0;
       speedX = normalizedHit * maxHorizontalSpeed;
 
-      float upwardSpeed = 6.0;
+      float upwardSpeed = 5.0;
       speedY = -upwardSpeed;
 
       ballY = paddleY - radius;
