@@ -28,20 +28,20 @@ int highscore = score;
 int startButtonX = 125, startButtonY = 340, startButtonWidth = 350, startButtonHeight = 100;
 int paddleX = 200, paddleY = 480, paddleWidth = 150, paddleHeight = 15;
 
-int playAgainX = 150, playAgainY = 410, playAgainWidth = 240, playAgainHeight = 50;
+int playAgainX = 165, playAgainY = 410, playAgainWidth = 240, playAgainHeight = 50;
 
 // Bouncing ball
 ArrayList<Ball> balls = new ArrayList<Ball>();
 
 // Blocks
 int startBlockX = 90, startBlockY = 60;
-int blockX = startBlockX, blockY = startBlockY, blockWidth = 50, blockHeight = 25, blockRadius = 10;
+int blockX = startBlockX, blockY = startBlockY, blockWidth = 50, blockHeight = 25, blockdiameter = 10;
 boolean blocksLoaded = false;
 
 // Configurations
 int screenWidth = 600, screenHeight = 600;
 int paddleSpeed = 10;
-int maxLives = 3;
+int maxLives = 1;
 int livesCount = maxLives;
 
 boolean blockCollisionDebounce = false;
@@ -132,8 +132,8 @@ void resetBall() {
     -4,
     25
     ));
-    
-   blockGraceEnd = millis() + blockResetCollisionCooldown;
+
+  blockGraceEnd = millis() + blockResetCollisionCooldown;
 }
 
 void resetBlocks() {
@@ -198,34 +198,34 @@ void draw() {
     fill(255);
     text(score, 275, 40);
 
-  if (millis() >= blockGraceEnd) {
-    for (int ballIndex = 0; ballIndex < balls.size(); ballIndex++) {
-      Ball ball = balls.get(ballIndex);
+    if (millis() >= blockGraceEnd) {
+      for (int ballIndex = 0; ballIndex < balls.size(); ballIndex++) {
+        Ball ball = balls.get(ballIndex);
 
-      // Block collision debounce
-      if (millis() - lastBlockCollision >= collisionCooldown) {
-        ball.hitDebounce = false;
-      }
+        // Block collision debounce
+        if (millis() - lastBlockCollision >= collisionCooldown) {
+          ball.hitDebounce = false;
+        }
 
-      // Update and display balls
-      if (balls.size() > 0) {
-        ball.update();
-        ball.display();
-      }
+        // Update and display balls
+        if (balls.size() > 0) {
+          ball.update();
+          ball.display();
+        }
 
-      // Player lost a life
-      if (ball.ballY + ball.radius > screenHeight) {
-        balls.remove(ball);
-        if (balls.size() <= 0) {
-          livesCount--;
-          resetBall();
-          if (livesCount <= 0) {
-            gameOver();
+        // Player lost a life
+        if (ball.ballY + ball.diameter > screenHeight) {
+          balls.remove(ball);
+          if (balls.size() <= 0) {
+            livesCount--;
+            resetBall();
+            if (livesCount <= 0) {
+              gameOver();
+            }
           }
         }
       }
     }
-  }
 
     for (int blockIndex = 0; blockIndex < blockMaxCount; blockIndex++) {
 
@@ -258,49 +258,71 @@ void draw() {
 
     for (int b = 0; b < balls.size(); b++) {
       Ball ball = balls.get(b);
+      if (ball.hitDebounce) continue;
+
+      float radius = ball.diameter / 2.0;
 
       for (int bb = 0; bb < blockMaxCount; bb++) {
-
-        if (!blockAlive[bb]) continue;
+        if (!blockAlive[bb]) {
+          continue;
+        }
 
         int col = bb % blockColumns;
         int row = bb / blockColumns;
 
-        int x = startBlockX + col * blockSpacingX;
-        int y = startBlockY + row * blockSpacingY;
+        float x = startBlockX + col * blockSpacingX;
+        float y = startBlockY + row * blockSpacingY;
 
-        // Collision detection
-        if (
-          ball.ballX + ball.radius > x &&
-          ball.ballX - ball.radius < x + blockWidth &&
-          ball.ballY + ball.radius > y &&
-          ball.ballY - ball.radius < y + blockHeight
-          ) {
+        // Closest point on the block rectangle to the ball's center
+        float closestX = constrain(ball.ballX, x, x + blockWidth);
+        float closestY = constrain(ball.ballY, y, y + blockHeight);
 
-          // Determine collision direction
-          float deltaX = ball.ballX - (x + blockWidth / 2.0);
-          float deltaY = ball.ballY - (y + blockHeight / 2.0);
+        float dx = ball.ballX - closestX;
+        float dy = ball.ballY - closestY;
+        float distSq = dx * dx + dy * dy;
 
-          if (abs(deltaX) > abs(deltaY)) {
+        if (distSq < radius * radius) {
+          // Calculate how far the ball overlaps horizontally vs. vertically
+          float overlapLeft   = (ball.ballX + radius) - x;
+          float overlapRight  = (x + blockWidth) - (ball.ballX - radius);
+          float overlapTop    = (ball.ballY + radius) - y;
+          float overlapBottom = (y + blockHeight) - (ball.ballY - radius);
+
+          float minOverlapX = min(overlapLeft, overlapRight);
+          float minOverlapY = min(overlapTop, overlapBottom);
+
+          if (minOverlapX < minOverlapY) {
+            if (overlapLeft < overlapRight) {
+              ball.ballX = x - radius;
+            } else {
+              ball.ballX = x + blockWidth + radius;
+            }
             ball.speedX *= -1;
           } else {
+            if (overlapTop < overlapBottom) {
+              ball.ballY = y - radius;
+            } else {
+              ball.ballY = y + blockHeight + radius;
+            }
             ball.speedY *= -1;
           }
 
-          // Destroy block
+          ball.hitDebounce = true;
+          lastBlockCollision = millis();
+
+          // Destroy block & award points
           blockAlive[bb] = false;
           blockCount--;
           score += blockPointsWorth;
 
-          // Check special blocks
+          // Special block effect
           for (int s = 0; s < specialBlocks.length; s++) {
             if (specialBlocks[s] == bb) {
-              createBall(x + blockWidth / 2, y + blockHeight / 2);
+              createBall(x + blockWidth / 2.0, y + blockHeight / 2.0);
               break;
             }
           }
 
-          // Stop checking blocks for THIS ball
           break;
         }
       }
@@ -313,30 +335,31 @@ void draw() {
     }
   }
 
-  // Game over screen handling inside draw()
   if (gameOver) {
     background(20);
     fill(120);
-    rect(100, 150, 350, 250, 12);
+    rect(120, 150, 350, 250, 12);
 
     fill(255);
+    textAlign(CENTER);
     textFont(fontBold);
-    text("GAME OVER", 135, 225);
+    text("GAME OVER", 300, 225);
 
     textSize(20);
     // Show the score
-    text("Score", 170, 320);
-    text(lastScore, 185, 345);
+    text("Score", 190, 320);
+    text(lastScore, 190, 345);
 
     // Highscore
-    text("Highscore", 285, 320);
-    text(highscore, 320, 345);
+    text("Highscore", 360, 320);
+
+    text(highscore, 360, 345);
 
     // Create "Play again" button
     rect(playAgainX, playAgainY, playAgainWidth, playAgainHeight, 15);
     fill(0);
     textSize(32);
-    text("Play Again", 195, 445);
+    text("Play Again", playAgainX + 125, 445);
   }
 }
 
@@ -399,15 +422,15 @@ void mousePressed() {
 class Ball {
   float ballX, ballY;
   float speedX, speedY;
-  int radius = 25;
+  int diameter = 25;
   boolean hitDebounce = false;
 
-  Ball(float ballX, float ballY, float speedX, float speedY, int radius) {
+  Ball(float ballX, float ballY, float speedX, float speedY, int diameter) {
     this.ballX = ballX;
     this.ballY = ballY;
     this.speedX = speedX;
     this.speedY = speedY;
-    this.radius = radius;
+    this.diameter = diameter;
     this.hitDebounce = hitDebounce;
   }
 
@@ -415,26 +438,26 @@ class Ball {
     ballX += speedX;
     ballY += speedY;
 
-    if (ballX - radius < 0) {
-      ballX = radius;
+    if (ballX - diameter < 0) {
+      ballX = diameter;
       speedX *= -1;
     }
 
     // Ball hitting the right wall
-    if (ballX + radius > screenWidth) {
-      ballX = screenWidth - radius;
+    if (ballX + diameter > screenWidth) {
+      ballX = screenWidth - diameter;
       speedX *= -1;
     }
 
     // Hitting the top
-    if (ballY - radius < 0) {
-      ballY = radius;
+    if (ballY - diameter < 0) {
+      ballY = diameter;
       speedY *= -1;
     }
 
     // Ball and paddle collision
     if (ballX >= paddleX && ballX <= paddleX + paddleWidth &&
-      ballY + radius >= paddleY && ballY <= paddleY + paddleHeight && speedY > 0) {
+      ballY + diameter >= paddleY && ballY <= paddleY + paddleHeight && speedY > 0) {
 
       float paddleCenterX = paddleX + (paddleWidth / 2.0);
       float hitOffset = ballX - paddleCenterX;
@@ -446,12 +469,12 @@ class Ball {
       float upwardSpeed = 5.0;
       speedY = -upwardSpeed;
 
-      ballY = paddleY - radius;
+      ballY = paddleY - diameter;
     }
   }
 
   void display() {
     fill(255);
-    circle(ballX, ballY, radius);
+    circle(ballX, ballY, diameter);
   }
 }
