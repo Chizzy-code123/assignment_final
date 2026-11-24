@@ -16,6 +16,7 @@ boolean ballInPlay = false;
 boolean leftPressed = false;
 boolean rightPressed = false;
 boolean gameOver = false;
+boolean gamePaused = false;
 
 PFont fontBold;
 PFont fontNormal;
@@ -30,6 +31,8 @@ int paddleX = 200, paddleY = 480, paddleWidth = 150, paddleHeight = 15;
 
 int playAgainX = 165, playAgainY = 410, playAgainWidth = 240, playAgainHeight = 50;
 
+int pauseButtonX = 520, pauseButtonY = 10, pauseButtonWidth = 50, pauseButtonHeight = 50;
+
 // Bouncing ball
 ArrayList<Ball> balls = new ArrayList<Ball>();
 
@@ -41,14 +44,14 @@ boolean blocksLoaded = false;
 // Configurations
 int screenWidth = 600, screenHeight = 600;
 int paddleSpeed = 10;
-int maxLives = 1;
+int maxLives = 3;
 int livesCount = maxLives;
 
 boolean blockCollisionDebounce = false;
 int blockResetCollisionCooldown = 900;
 float blockGraceEnd = 0;
 float lastBlockCollision;
-float collisionCooldown = 250;
+float collisionCooldown = 80;
 
 int blockMaxCount = 28;
 int blockColumns = 7;
@@ -87,7 +90,6 @@ void setup() {
     if (random(0, 100) < 10 && currentSpecialBlockIndex < specialBlocks.length) {
       specialBlocks[currentSpecialBlockIndex] = i;
       currentSpecialBlockIndex++;
-      println("Special block : " + i);
     }
   }
 
@@ -116,6 +118,15 @@ void gameOver() {
   }
 
   score = 0;
+}
+
+boolean isSpecialBlock(int blockIndex) {
+  for (int i = 0; i < specialBlocks.length; i++) {
+    if (specialBlocks[i] == blockIndex) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void resetBall() {
@@ -227,6 +238,7 @@ void draw() {
       }
     }
 
+    // Load blocks
     for (int blockIndex = 0; blockIndex < blockMaxCount; blockIndex++) {
 
       if (!blockAlive[blockIndex]) continue;
@@ -239,19 +251,37 @@ void draw() {
 
       strokeWeight(3);
 
+      color baseColor;
+      color baseStroke;
       if (blockIndex < 7) {
-        fill(210, 198, 45);
-        stroke(158, 138, 24);
+        // Yellow
+        baseColor = color(210, 198, 45);
+        baseStroke = color(158, 138, 24);
       } else if (blockIndex < 14) {
-        fill(2, 161, 23);
-        stroke(7, 140, 25);
+        // Green
+        baseColor = color(2, 161, 23);
+        baseStroke = color(7, 140, 25);
       } else if (blockIndex < 21) {
-        fill(255, 59, 59);
-        stroke(209, 44, 44);
+        // Red
+        baseColor = color(255, 59, 59);
+        baseStroke = color(209, 44, 44);
+      } else if (blockIndex > 20) {
+        // Blue
+        baseColor = color(42, 128, 209);
+        baseStroke = color(40, 100, 156);
       } else {
-        fill(42, 128, 209);
-        stroke(40, 100, 156);
+        baseColor = color(0);
+        baseStroke = color(0);
       }
+      // Darken the block if its special
+      if (isSpecialBlock(blockIndex)) {
+        // Special block
+        baseColor = lerpColor(baseColor, color(0), 0.25);
+        baseStroke = lerpColor(baseColor, color(0), 0.25);
+      }
+
+      fill(baseColor);
+      stroke(baseStroke);
 
       rect(x, y, blockWidth, blockHeight, 10);
     }
@@ -262,6 +292,7 @@ void draw() {
 
       float radius = ball.diameter / 2.0;
 
+      // Ball and block collision
       for (int bb = 0; bb < blockMaxCount; bb++) {
         if (!blockAlive[bb]) {
           continue;
@@ -282,7 +313,7 @@ void draw() {
         float distSq = dx * dx + dy * dy;
 
         if (distSq < radius * radius) {
-          // Calculate how far the ball overlaps horizontally vs. vertically
+          // Calculate how far the ball overlaps horizontally and vertically
           float overlapLeft   = (ball.ballX + radius) - x;
           float overlapRight  = (x + blockWidth) - (ball.ballX - radius);
           float overlapTop    = (ball.ballY + radius) - y;
@@ -307,20 +338,19 @@ void draw() {
             ball.speedY *= -1;
           }
 
+          // Debounce
           ball.hitDebounce = true;
           lastBlockCollision = millis();
 
-          // Destroy block & award points
+          // Destroy block
           blockAlive[bb] = false;
           blockCount--;
           score += blockPointsWorth;
 
           // Special block effect
-          for (int s = 0; s < specialBlocks.length; s++) {
-            if (specialBlocks[s] == bb) {
-              createBall(x + blockWidth / 2.0, y + blockHeight / 2.0);
-              break;
-            }
+          if (isSpecialBlock(bb)) {
+            createBall(x + blockWidth / 2.0, y + blockHeight / 2.0);
+            break;
           }
 
           break;
@@ -333,6 +363,31 @@ void draw() {
       blockCount = 0;
       resetBlocks();
     }
+  }
+
+  // Pause button
+  if (roundStarted) {
+
+    fill(120);
+    stroke(90);
+    rect(pauseButtonX, pauseButtonY, pauseButtonWidth, pauseButtonHeight);
+    fill(255);
+    stroke(0);
+    strokeWeight(2);
+    rect(pauseButtonX + 13, pauseButtonY + 10, 7, 30, 10);
+    rect(pauseButtonX + 30, pauseButtonY + 10, 7, 30, 10);
+  }
+  if (gamePaused) {
+    fill(120);
+    rect(120, 150, 350, 250, 12);
+    fill(255);
+    textAlign(CENTER);
+    textFont(fontBold);
+    text("Paused", 300, 225);
+    
+    textSize(36);
+    // Show the score
+    text("[E] to continue", 300, 320);
   }
 
   if (gameOver) {
@@ -390,6 +445,8 @@ void keyPressed() {
     if (!ballInPlay && roundStarted) {
       ballInPlay = true;
     }
+  } else if (Character.toLowerCase(key) == 'e') {
+   gamePaused = false; 
   }
 }
 
@@ -417,6 +474,13 @@ void mousePressed() {
     roundStarted = true;
     gameOver = false;
   }
+
+  // Pressed pause
+  if (mouseX >= pauseButtonX && mouseX <= pauseButtonX + pauseButtonWidth
+    && mouseY >= pauseButtonY && mouseY <= pauseButtonY + pauseButtonHeight
+    && roundStarted) {
+    gamePaused = true;
+  }
 }
 
 class Ball {
@@ -435,29 +499,34 @@ class Ball {
   }
 
   void update() {
+    if (gamePaused) {
+     return;
+    }
     ballX += speedX;
     ballY += speedY;
 
-    if (ballX - diameter < 0) {
-      ballX = diameter;
+    float radius = diameter / 2.0;
+
+    if (ballX - radius < 0) {
+      ballX = radius;
       speedX *= -1;
     }
 
     // Ball hitting the right wall
-    if (ballX + diameter > screenWidth) {
-      ballX = screenWidth - diameter;
+    if (ballX + radius > screenWidth) {
+      ballX = screenWidth - radius;
       speedX *= -1;
     }
 
     // Hitting the top
-    if (ballY - diameter < 0) {
-      ballY = diameter;
+    if (ballY - radius < 0) {
+      ballY = radius;
       speedY *= -1;
     }
 
     // Ball and paddle collision
     if (ballX >= paddleX && ballX <= paddleX + paddleWidth &&
-      ballY + diameter >= paddleY && ballY <= paddleY + paddleHeight && speedY > 0) {
+      ballY + radius >= paddleY && ballY <= paddleY + paddleHeight && speedY > 0) {
 
       float paddleCenterX = paddleX + (paddleWidth / 2.0);
       float hitOffset = ballX - paddleCenterX;
@@ -469,7 +538,7 @@ class Ball {
       float upwardSpeed = 5.0;
       speedY = -upwardSpeed;
 
-      ballY = paddleY - diameter;
+      ballY = paddleY - radius;
     }
   }
 
