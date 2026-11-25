@@ -1,12 +1,12 @@
 /*
-    Chizzy
- I'm making a block breaker type game that I saw on google
+   Chizzy
+   I'm making a block breaker type game that I saw on google
  
- The mechanics in this game will be
- - Moving paddle that can hit the moving ball
- - Rectangles that will increase the player's score if hit
- - Score
- - Retry button
+   The mechanics in this game will be
+   - Moving paddle that can hit the moving ball
+   - Rectangles that will increase the player's score if hit
+   - Score
+   - Retry button
  */
 
 // Variables
@@ -57,7 +57,6 @@ int blockMaxCount = 28;
 int blockColumns = 7;
 int blockSpacingX = 55, blockSpacingY = 30;
 int blockCount = blockMaxCount;
-int currentBlock = 0;
 int blockPointsWorth = 50;
 
 // Special block
@@ -446,7 +445,7 @@ void keyPressed() {
       ballInPlay = true;
     }
   } else if (Character.toLowerCase(key) == 'e') {
-   gamePaused = false; 
+   gamePaused = !gamePaused; 
   }
 }
 
